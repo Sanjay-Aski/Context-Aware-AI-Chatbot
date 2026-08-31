@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  getChats,
-  createChat,
-  getChatById,
-  sendMessage,
-} from "../api/chatApi";
+import { getChats, createChat, getChatById, sendMessage } from "../api/chatapi";
 
 export default function useChats(sessionId) {
   const [chats, setChats] = useState([]);
@@ -13,21 +8,22 @@ export default function useChats(sessionId) {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadChats();
-  }, []);
-
-  const loadChats = async () => {
-    const res = await getChats(sessionId);
-    setChats(res.data);
-  };
+    let cancelled = false;
+    async function loadChats() {
+      try {
+        const res = await getChats(sessionId);
+        if (!cancelled) setChats(res.data || []);
+      } catch {
+        if (!cancelled) setChats([]);
+      }
+    }
+    void loadChats();
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
   const handleCreateChat = async () => {
-    const res = await createChat({
-      session_id: sessionId,
-      title: "New Chat",
-    });
-
-    setChats((prev) => [res.data, ...prev]);
+    const res = await createChat({ session_id: sessionId, title: "New conversation" });
+    setChats((previous) => [res.data, ...previous]);
     setActiveChat(res.data.id);
     setMessages([]);
   };
@@ -39,35 +35,21 @@ export default function useChats(sessionId) {
   };
 
   const handleSendMessage = async (input, file) => {
-    if (!activeChat) return; // 🔥 fixes your null issue
-    if (!input && !file) return;
-
+    if (!activeChat || (!input.trim() && !file)) return false;
     setLoading(true);
-
-    const formData = new FormData();
-    formData.append("content", input);
-
-    if (file) formData.append("file", file);
-
-    const res = await sendMessage(activeChat, formData);
-
-    setMessages((prev) => [
-      ...prev,
-      res.data.user_message,
-      res.data.assistant_message,
-    ]);
-
-    setLoading(false);
+    try {
+      const formData = new FormData();
+      formData.append("content", input);
+      if (file) formData.append("file", file);
+      const res = await sendMessage(activeChat, formData);
+      setMessages((previous) => [...previous, res.data.user_message, res.data.assistant_message]);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  return {
-    chats,
-    activeChat,
-    messages,
-    loading,
-    setMessages,
-    handleCreateChat,
-    handleOpenChat,
-    handleSendMessage,
-  };
+  return { chats, activeChat, messages, loading, setMessages, handleCreateChat, handleOpenChat, handleSendMessage };
 }
