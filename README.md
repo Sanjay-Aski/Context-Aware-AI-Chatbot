@@ -1,36 +1,89 @@
 # ChatModel
 
-A React chat frontend and FastAPI backend with MongoDB conversation storage, LangChain prompt and history formatting, and direct Ollama Cloud inference through the official async Python SDK.
+A full-stack AI chat workspace with a React/Vite frontend and FastAPI backend. Conversations are stored in MongoDB, prompts and history are formatted with LangChain, and responses are generated through Ollama Cloud using the official async Python SDK.
 
-## Backend setup
+## Features
 
-1. Copy `Backend/.env.example` to `Backend/.env` and set `MONGO_URL` and `OLLAMA_API_KEY`.
-2. Install backend packages from the project root:
+- Multiple conversations with persistent message history.
+- Assistant replies rendered as GitHub-style Markdown, including tables, lists, and code blocks.
+- Per-conversation actions to delete a chat or export its complete history as JSON. Exports include attachment bytes encoded as Base64.
+- Multi-file attachments shown as cards in the conversation and stored in MongoDB GridFS.
+- File content extraction for PDF, DOCX, PPTX, XLSX, CSV/TSV, text, and common source-code files including Python, Java, C, and C++.
+- Image understanding and sampled video frames sent as visual context to the model.
+- Audio and video speech transcription using `faster-whisper` on the backend.
 
-   ```bash
-   python -m pip install -r Backend/requirements.txt
-   ```
+## Requirements
 
-3. Start FastAPI from the `Backend` directory:
+- Python 3.10 or newer.
+- Node.js and npm.
+- A running MongoDB instance. The default connection is `mongodb://localhost:27017`.
+- An Ollama Cloud API key.
 
-   ```bash
-   python server.py
-   ```
+## Configuration
 
-The API starts on `http://127.0.0.1:8000`. Visit `/api/health` to check backend, MongoDB, and Cloud configuration status.
+Copy the example environment file and add your Ollama Cloud key:
 
-## Frontend setup
+```powershell
+Copy-Item Backend/.env.example Backend/.env
+```
 
-```bash
+Set `OLLAMA_API_KEY` in `Backend/.env`. The default model is `gemma4:31b`; `OLLAMA_BASE_URL` defaults to `https://ollama.com`. Keep the API key in the backend environment file; the frontend does not need it.
+
+Other backend settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MONGO_URL` | `mongodb://localhost:27017` | MongoDB connection string |
+| `DB_NAME` | `chatmodel` | Database name |
+| `OLLAMA_MODEL` | `gemma4:31b` | Ollama Cloud model identifier |
+| `OLLAMA_TIMEOUT_SECONDS` | `120` | Model request timeout |
+| `MAX_UPLOAD_SIZE_MB` | `25` | Maximum size per attachment |
+| `MAX_FILES_PER_MESSAGE` | `8` | Maximum attachments per message |
+| `AUDIO_TRANSCRIPTION_MODEL` | `tiny` | faster-whisper model used for audio/video transcription |
+
+The first audio or video transcription may download the configured faster-whisper model. Device and compute settings can be changed with `AUDIO_TRANSCRIPTION_DEVICE` and `AUDIO_TRANSCRIPTION_COMPUTE_TYPE`.
+
+## Run locally
+
+Start the backend in one terminal from the project root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r Backend/requirements.txt
+python Backend/server.py
+```
+
+If you already have a virtual environment, activate it and skip the first three setup commands. The API runs at `http://127.0.0.1:8000`. Check its status at `http://127.0.0.1:8000/api/health`.
+
+Start the frontend in another terminal:
+
+```powershell
 cd Frontend
 npm install
 npm run dev
 ```
 
-Vite serves the app on port 5173 and proxies `/api` requests to the backend on port 8000. The Ollama API key stays in `Backend/.env` and is never sent to the browser.
+Open the local URL printed by Vite (usually `http://localhost:5173`). Vite proxies `/api` requests to the backend on port 8000.
 
-## Attachments
+## Tests and checks
 
-The chat accepts up to eight files per message (25 MB each by default). PDF, DOCX, PPTX, XLSX, CSV/TSV, common source-code and text files, images, audio, and video are processed for model context. Original file bytes are stored in MongoDB GridFS and displayed as downloadable attachment cards. Scanned PDF pages and video frames are sampled for visual context. Audio and video speech are transcribed with `faster-whisper` on the backend; its small `tiny` model is downloaded on first use. Limits and transcription settings are configurable in `Backend/.env`.
+Run backend tests from `Backend`:
 
-Assistant messages render GitHub-style Markdown, including horizontally scrollable tables. The three-dot menu on a conversation can delete it or export the complete history as JSON, including attached binary files encoded as Base64.
+```powershell
+python -m unittest discover -s tests -v
+python -m py_compile server.py file_readers.py
+```
+
+Run frontend checks from `Frontend`:
+
+```powershell
+npm run lint
+npm run build
+```
+
+## Notes
+
+- MongoDB stores chats and message metadata; original uploaded file bytes are kept in GridFS rather than embedded in chat documents.
+- The model receives extracted text and supported image content. Audio is transcribed locally before the transcript is sent to Ollama Cloud.
+- The backend has no local Ollama model fallback; it requires a configured Ollama Cloud key and a reachable Cloud endpoint.

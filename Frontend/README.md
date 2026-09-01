@@ -1,12 +1,21 @@
 # ChatModel Frontend
 
-React and Vite frontend for the FastAPI chat backend. Development requests under `/api` are proxied to `http://127.0.0.1:8000`.
+React and Vite interface for the ChatModel FastAPI backend. The app supports multiple conversations, Markdown-rendered replies and tables, multi-file attachments, conversation deletion, and full JSON history export.
 
-## Run
+## Development
 
-```bash
+```powershell
 npm install
 npm run dev
 ```
 
-The app keeps a browser session ID and supports multiple conversations, message history, and text file attachments. Backend API errors appear above the composer, and failed sends keep the draft available for retry.
+Run the backend separately; the Vite development server proxies `/api` requests to `http://127.0.0.1:8000`.
+
+## Checks
+
+```powershell
+npm run lint
+npm run build
+```
+
+See the [project README](../README.md) for backend setup, environment configuration, attachment support, and run instructions.
