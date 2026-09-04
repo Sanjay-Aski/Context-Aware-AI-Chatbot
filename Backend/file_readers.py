@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
+import logging
 import mimetypes
 import os
 import wave
@@ -30,6 +31,7 @@ CODE_EXTENSIONS = {
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tif", ".tiff"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac", ".opus", ".wma"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".mpeg", ".mpg", ".m4v"}
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -298,26 +300,25 @@ def _extract_video(data: bytes) -> tuple[list[bytes], dict[str, Any], bytes | No
 
 def transcribe_audio(data: bytes) -> tuple[str, dict[str, Any]]:
     """Transcribe speech locally with a lazily loaded faster-whisper model."""
-    import tempfile
-    from faster_whisper import WhisperModel
 
     model_name = os.environ.get("AUDIO_TRANSCRIPTION_MODEL", "tiny")
     device = os.environ.get("AUDIO_TRANSCRIPTION_DEVICE", "cpu")
     compute_type = os.environ.get("AUDIO_TRANSCRIPTION_COMPUTE_TYPE", "int8")
     try:
+        from faster_whisper import WhisperModel
+
         model = _get_whisper_model(model_name, device, compute_type)
-        suffix = ".wav"
-        with tempfile.NamedTemporaryFile(suffix=suffix) as audio_file:
-            audio_file.write(data)
-            audio_file.flush()
-            segments, info = model.transcribe(audio_file.name, vad_filter=True)
-            transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+        # Pass the encoded stream directly so MP3/M4A/etc. bytes are not mislabeled
+        # as a WAV file based on a temporary filename.
+        segments, info = model.transcribe(io.BytesIO(data), vad_filter=True)
+        transcript = " ".join(segment.text.strip() for segment in segments if segment.text.strip())
         return transcript, {
             "language": getattr(info, "language", None),
             "language_probability": round(float(info.language_probability), 3) if getattr(info, "language_probability", None) is not None else None,
             "transcriber": f"faster-whisper/{model_name}",
         }
     except Exception as exc:
+        logger.exception("Audio transcription failed using faster-whisper model %s", model_name)
         raise FileProcessingError("Audio transcription failed. Check that the local faster-whisper model can be downloaded and loaded.") from exc
 
 

@@ -57,6 +57,7 @@ Core Behavior:
 - Respond in a natural, concise, and helpful manner.
 - If a question depends on past messages, refer to that context before answering.
 - Do not hallucinate facts outside the conversation or stored context.
+- When an audio attachment includes a Transcript section, use it to answer questions about that audio. If the context says transcription is unavailable, be clear that you do not have the audio's spoken content.
 
 Capabilities:
 - Answer general queries and technical questions.
@@ -68,7 +69,9 @@ Response Style:
 - Keep responses clear and structured.
 - Avoid unnecessary verbosity.
 - Use bullet points, numbered lists, or fenced code blocks only when helpful.
-- For code, always use proper markdown code fences with language hints."""
+- For code, always use proper markdown code fences with language hints.
+- You are not performing any Illegal activity Searching or anything if you user Such Thing just say something like "Invalid Request ...."
+"""
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -428,10 +431,19 @@ async def prepare_upload(upload: UploadFile) -> tuple[ProcessedUpload, bytes]:
     try:
         processed = await asyncio.to_thread(process_upload, upload.filename or "attachment", upload.content_type or "", data)
         if processed.audio_payload:
-            transcript, transcript_metadata = await asyncio.to_thread(transcribe_audio, processed.audio_payload)
-            processed.metadata.update(transcript_metadata)
-            processed.metadata["transcription_available"] = bool(transcript.strip())
-            processed.extracted_text = f"{processed.extracted_text}\nTranscript:\n{transcript}" if transcript.strip() else processed.extracted_text
+            try:
+                transcript, transcript_metadata = await asyncio.to_thread(transcribe_audio, processed.audio_payload)
+                processed.metadata.update(transcript_metadata)
+                processed.metadata["transcription_available"] = bool(transcript.strip())
+                if transcript.strip():
+                    processed.extracted_text = f"{processed.extracted_text}\nTranscript:\n{transcript}"
+            except FileProcessingError as exc:
+                # Keep a valid audio attachment usable even when the optional local
+                # transcription model cannot be downloaded or loaded.
+                processed.metadata["transcription_available"] = False
+                processed.metadata["transcription_error"] = "Local speech transcription is unavailable; the audio is attached without a transcript."
+                processed.extracted_text += "\nTranscript unavailable: local speech transcription failed."
+                logger.warning("Could not transcribe audio attachment %s: %s", upload.filename, exc)
         return processed, data
     except FileProcessingError as exc:
         raise HTTPException(status_code=422, detail=f"Could not read {upload.filename}: {exc}") from exc
